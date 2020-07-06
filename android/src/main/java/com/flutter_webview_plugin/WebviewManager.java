@@ -5,9 +5,12 @@ import android.net.Uri;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Handler;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,6 +28,11 @@ import androidx.core.content.FileProvider;
 
 import android.database.Cursor;
 import android.provider.OpenableColumns;
+import android.webkit.DownloadListener;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebResourceRequest;
+import android.net.http.SslError;
+import android.widget.Toast;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -39,6 +47,7 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
 import static android.app.Activity.RESULT_OK;
+import android.widget.Toast;
 
 /**
  * Created by lejard_h on 20/12/2017.
@@ -134,6 +143,116 @@ class WebviewManager {
         this.resultHandler = new ResultHandler();
         this.platformThreadHandler = new Handler(context.getMainLooper());
         webViewClient = new BrowserClient() {
+
+            @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                // returning true causes the current WebView to abort loading the URL,
+                // while returning false causes the WebView to continue loading the URL as usual.
+                String url = request.getUrl().toString();
+                Log.e("url拦截：",url);
+//                Toast.makeText(activity, url, Toast.LENGTH_SHORT).show();
+                if (url.startsWith("weixin://wap/pay?")) {
+                    try{
+                        Intent intent = new Intent();
+                        intent.setAction(Intent.ACTION_VIEW);
+                        intent.setData(Uri.parse(url));
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到微信，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
+//                    if(isAppAvilible(activity,"com.tencent.mm")){
+//
+//                    }else{
+//                    }
+                    return true;
+                }
+                else if (url.startsWith("alipays:") || url.startsWith("alipay")) {
+                    try{
+                        Intent intent = new Intent();
+                        intent.setAction(Intent.ACTION_VIEW);
+                        intent.setData(Uri.parse(url));
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到支付宝，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
+                    return true;
+                }
+                else if (url.contains("intent://platformapi/startapp")) {
+                    try{
+                        Intent intent = Intent.parseUri(url,
+                                Intent.URI_INTENT_SCHEME);
+                        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                        intent.setComponent(null);
+                        // intent.setSelector(null);
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到支付宝，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
+//                    if(isAppAvilible(activity,"com.eg.android.AlipayGphone")){
+//                    }else{
+//                        Toast.makeText(activity,"尚未安装支付宝",Toast.LENGTH_SHORT).show();
+//                    }
+                    return true;
+                }
+                else if(!url.startsWith("http")){
+                    //过滤非页面地址，主要是防止H5广告
+                    return true;
+                }
+                return super.shouldOverrideUrlLoading(view, request);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                Log.e("url拦截：",url);
+//                Toast.makeText(activity, url, Toast.LENGTH_SHORT).show();
+                // 如下方案可在非微信内部WebView的H5页面中调出微信支付
+                if (url.startsWith("weixin://wap/pay?")) {
+                    try{
+                        Intent intent = new Intent();
+                        intent.setAction(Intent.ACTION_VIEW);
+                        intent.setData(Uri.parse(url));
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到微信，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
+                    return true;
+                }
+                else if (url.startsWith("alipays:") || url.startsWith("alipay")) {
+                    try{
+                        Intent intent = new Intent();
+                        intent.setAction(Intent.ACTION_VIEW);
+                        intent.setData(Uri.parse(url));
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到支付宝，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
+                    return true;
+                }
+                else if (url.contains("intent://platformapi/startapp")) {
+                    try{
+                        Intent intent = Intent.parseUri(url,
+                                Intent.URI_INTENT_SCHEME);
+                        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                        intent.setComponent(null);
+                        // intent.setSelector(null);
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到支付宝，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
+//                    if(isAppAvilible(activity,"com.eg.android.AlipayGphone")){
+//                    }else{
+//                        Toast.makeText(activity,"尚未安装支付宝",Toast.LENGTH_SHORT).show();
+//                    }
+                    return true;
+                }
+                else if(!url.startsWith("http")){
+                    //过滤非页面地址，主要是防止H5广告
+                    return true;
+                }
+                return super.shouldOverrideUrlLoading(view, url);
+            }
+
             @Override
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 if (ignoreSSLErrors){
@@ -143,6 +262,19 @@ class WebviewManager {
                 }
             }
         };
+        webView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
+                try{
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                    intent.setData(Uri.parse(url));
+                    activity.startActivity(intent);
+                }catch (Exception e){
+
+                }
+            }
+        });
         webView.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View v, int keyCode, KeyEvent event) {
@@ -414,6 +546,12 @@ class WebviewManager {
 
         if (geolocationEnabled) {
             webView.getSettings().setGeolocationEnabled(true);
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                    callback.invoke(origin, true, false);
+                }
+            });
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -554,4 +692,22 @@ class WebviewManager {
             webView.stopLoading();
         }
     }
+
+
+//    /**
+//     * 判断 用户是否安装app
+//     */
+//    private boolean isAppAvilible(Context context,String packageName) {
+//        final PackageManager packageManager = context.getPackageManager();// 获取packagemanager
+//        List<PackageInfo> pinfo = packageManager.getInstalledPackages(0);// 获取所有已安装程序的包信息
+//        if (pinfo != null) {
+//            for (int i = 0; i < pinfo.size(); i++) {
+//                String pn = pinfo.get(i).packageName;
+//                if (pn.equals(packageName)) {
+//                    return true;
+//                }
+//            }
+//        }
+//        return false;
+//    }
 }

@@ -364,6 +364,11 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     }
 }
 
+- (void)cleanCookies {
+    [[NSURLSession sharedSession] resetWithCompletionHandler:^{
+        }];
+}
+
 - (bool)checkInvalidUrl:(NSURL*)url {
   NSString* urlString = url != nil ? [url absoluteString] : nil;
   if (![_invalidUrlRegex isEqual:[NSNull null]] && urlString != nil) {
@@ -384,6 +389,29 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
 #pragma mark -- WkWebView Delegate
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
     decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
+
+    NSURL *requestURL =  navigationAction.request.URL;
+    if (requestURL != nil) {
+        if ([requestURL.scheme isEqualToString:@"weixin"]) {    //处理微信支付
+            [self weixinCatchEvent:requestURL];
+            decisionHandler(WKNavigationActionPolicyCancel);
+            return;
+        } else if ([requestURL.scheme isEqualToString:@"alipays"] || [requestURL.scheme isEqualToString:@"alipay"]) {       //处理支付宝支付
+            [self zhifubaoCatchEvent:requestURL];
+        } else if ([requestURL.scheme isEqualToString:@"intent"]) {
+            if ([requestURL.host isEqualToString:@"platformapi"] && [requestURL.relativePath isEqualToString:@"/startapp"]) {       //处理老版本支付宝支付
+                [self zhifubaoCatchEvent:requestURL];
+            }
+        }
+    }
+
+    NSString *_webUrlStr = navigationAction.request.URL.absoluteString;
+    NSString *lastName =[[_webUrlStr lastPathComponent] lowercaseString];
+    if ([lastName containsString:@".pdf"])
+    {
+        NSData *data = [NSData dataWithContentsOfURL:navigationAction.request.URL];
+        [self.webview loadData:data MIMEType:@"application/pdf" characterEncodingName:@"GBK" baseURL:nil];
+    }
 
     BOOL isInvalid = [self checkInvalidUrl: navigationAction.request.URL];
     
@@ -411,6 +439,71 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
          }
     } else {
         decisionHandler(WKNavigationActionPolicyCancel);
+    }
+}
+
+- (void)weixinCatchEvent:(NSURL *)url {
+    if ([url.host isEqualToString:@"wap"]) {
+        if ([url.relativePath isEqualToString:@"/pay"]) {
+            if ([[UIApplication sharedApplication] canOpenURL:url]) {
+                if ( @available(iOS 10.0, *) ) {
+                    [[UIApplication sharedApplication] openURL:url options:@{UIApplicationOpenURLOptionUniversalLinksOnly : [NSNumber numberWithBool:NO]} completionHandler:^(BOOL success) {
+
+                    }];
+                } else {
+                    [[UIApplication sharedApplication] openURL:url];
+                }
+            } else {
+                NSString *title = @"未检测到微信，请安装后重试";
+                [self showAlertController:[UIApplication sharedApplication].keyWindow.rootViewController title:title message:nil cancelTilte:@"好" otherTitleArray:nil];
+//                UIAlertView *alert = [[UIAlertView alloc]initWithTitle:title message:nil delegate:nil cancelButtonTitle:@"好" otherButtonTitles:nil];
+////                NSAttributedString *attributedMessage = [[NSAttributedString alloc] initWithString:title attributes:@{NSFontAttributeName:[UIFont systemFontOfSize:10.0f], NSForegroundColorAttributeName:[UIColor blackColor]}];
+////                [alert setValue:attributedMessage forKey:@"attributedTitle"];
+//                for( UIView * view in alert.subviews )
+//                {
+//                    if( [view isKindOfClass:[UILabel class]] )
+//                    {
+//                        UILabel* label = (UILabel*) view;
+////                        label.textAlignment = UITextAlignmentLeft;
+//                        label.font=[UIFont systemFontOfSize:10];
+////                        label.textColor=[UIColor greenColor];
+//                    }
+//
+//                }
+//                [alert show];
+            }
+        }
+    }
+}
+
+- (void)zhifubaoCatchEvent:(NSURL *)url {
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        if ( @available(iOS 10.0, *) ) {
+            [[UIApplication sharedApplication] openURL:url options:@{UIApplicationOpenURLOptionUniversalLinksOnly : [NSNumber numberWithBool:NO]} completionHandler:^(BOOL success) {
+
+            }];
+        } else {
+            [[UIApplication sharedApplication] openURL:url];
+        }
+    } else {
+        // 下面两行代码 是修改 title颜色和字体的代码
+        NSString *title = @"未检测到支付宝，请安装后重试";
+        [self showAlertController:[UIApplication sharedApplication].keyWindow.rootViewController title:title message:nil cancelTilte:@"好" otherTitleArray:nil];
+//        UIAlertView *alert = [[UIAlertView alloc]initWithTitle:title message:nil delegate:nil cancelButtonTitle:@"好" otherButtonTitles:nil];
+////        NSAttributedString *attributedMessage = [[NSAttributedString alloc] initWithString:title attributes:@{NSFontAttributeName:[UIFont systemFontOfSize:10.0f], NSForegroundColorAttributeName:[UIColor blackColor]}];
+////        [alert setValue:attributedMessage forKey:@"attributedTitle"];
+//        for( UIView * view in alert.subviews )
+//        {
+//            if( [view isKindOfClass:[UILabel class]] )
+//            {
+//                UILabel* label = (UILabel*) view;
+////                label.textAlignment = UITextAlignmentLeft;
+//                label.font=[UIFont systemFontOfSize:10];
+////                label.textColor=[UIColor greenColor];
+//            }
+//
+//        }
+//        [alert show];
     }
 }
 
@@ -475,6 +568,76 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     if (scrollView.pinchGestureRecognizer.isEnabled != _enableZoom) {
         scrollView.pinchGestureRecognizer.enabled = _enableZoom;
     }
+}
+
+- (void)showAlertController:(UIViewController *)viewController
+                      title:(NSString *)title
+                    message:(NSString *)message
+                cancelTitle:(NSString *)cancelTitle
+          otherButtonTitles:(NSString *)otherButtonTitles, ...  {
+    // 读取可变参数里面的titles数组
+    NSMutableArray *titlesArray = [[NSMutableArray alloc] initWithCapacity:0];
+    va_list list;
+    if(otherButtonTitles) {
+        //1.取得第一个参数的值(即是buttonTitles)
+        [titlesArray addObject:otherButtonTitles];
+        //2.从第2个参数开始，依此取得所有参数的值
+        NSString *otherTitle;
+        va_start(list, otherButtonTitles);
+        while ((otherTitle = va_arg(list, NSString*))) {
+            [titlesArray addObject:otherTitle];
+        }
+        va_end(list);
+    }
+
+    if([[[UIDevice currentDevice] systemVersion] floatValue]>=8.0){
+
+        [self showAlertController:viewController title:title message:message cancelTilte:cancelTitle otherTitleArray:titlesArray];
+    }else{
+
+        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:title message:message delegate:self cancelButtonTitle:cancelTitle otherButtonTitles: nil];
+        for(NSString *otherTitle in titlesArray){
+            [alert addButtonWithTitle:otherTitle];
+        }
+        [alert show];
+    }
+
+
+}
+//alert封装
+- (void)showAlertController:(UIViewController *)viewController
+                      title:(NSString *)title
+                    message:(NSString *)message
+                cancelTilte:(NSString *)cancelTitle
+            otherTitleArray:(NSArray *)otherTitleArray {
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+
+    // 下面两行代码 是修改 title颜色和字体的代码
+    NSAttributedString *attributedMessage = [[NSAttributedString alloc] initWithString:title attributes:@{NSFontAttributeName:[UIFont systemFontOfSize:10.0f], NSForegroundColorAttributeName:[UIColor blackColor]}];
+    [alert setValue:attributedMessage forKey:@"attributedTitle"];
+    if (cancelTitle) {
+        // 取消
+        UIAlertAction  *cancelAction = [UIAlertAction actionWithTitle:cancelTitle style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+
+        }];
+        [alert addAction:cancelAction];
+    }
+
+    if (otherTitleArray.count>0) {
+        for (NSInteger i = 0; i<otherTitleArray.count; i++) {
+
+            UIAlertAction *otherAction = [UIAlertAction actionWithTitle:otherTitleArray[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+
+            }];
+            // [action setValue:[UIColor redColor] forKey:@"titleTextColor"]; // 此代码 可以修改按钮颜色
+            [alert addAction:otherAction];
+        }
+
+    }
+
+    [viewController presentViewController:alert animated:YES completion:nil];
+
 }
 
 #pragma mark -- WKUIDelegate
