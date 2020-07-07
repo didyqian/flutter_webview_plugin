@@ -195,6 +195,19 @@ class WebviewManager {
 //                    }
                     return true;
                 }
+                else if (url.contains("cmbmobilebank://")) {
+                    try{
+                        Intent intent = Intent.parseUri(url,
+                                Intent.URI_INTENT_SCHEME);
+                        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                        intent.setComponent(null);
+                        // intent.setSelector(null);
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到招商银行APP，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
+                    return true;
+                }
                 else if(!url.startsWith("http")){
                     //过滤非页面地址，主要是防止H5广告
                     return true;
@@ -244,6 +257,19 @@ class WebviewManager {
 //                    }else{
 //                        Toast.makeText(activity,"尚未安装支付宝",Toast.LENGTH_SHORT).show();
 //                    }
+                    return true;
+                }
+                else if (url.contains("cmbmobilebank://")) {
+                    try{
+                        Intent intent = Intent.parseUri(url,
+                                Intent.URI_INTENT_SCHEME);
+                        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                        intent.setComponent(null);
+                        // intent.setSelector(null);
+                        activity.startActivity(intent);
+                    }catch (Exception e){
+                        Toast.makeText(activity,"未检测到招商银行APP，请安装后重试",Toast.LENGTH_SHORT).show();
+                    }
                     return true;
                 }
                 else if(!url.startsWith("http")){
